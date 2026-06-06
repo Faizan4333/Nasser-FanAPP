@@ -425,6 +425,37 @@
             margin-bottom: 1rem;
             padding: 1.5rem;
         }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 768px) {
+            nav {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
+            }
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            main {
+                padding: 1rem;
+            }
+            .view-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            h1 {
+                font-size: 1.8rem;
+            }
+            .sensors-container, .fans-grid {
+                grid-template-columns: 1fr;
+            }
+            .builder-grid {
+                display: flex;
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -576,16 +607,18 @@
                     <option value="50,50">Bosch 013... (50Hz, Pos)</option>
                 </select>
 
-                <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem;">
-                    <button class="btn" onclick="startTest()">Feed PWM Profile</button>
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-bottom: 2rem;">
+                    <button class="btn" onclick="startTest()">Feed Profile</button>
+                    <button class="btn" style="background: var(--secondary);" onclick="startAutoTest()">Auto Sequence Test</button>
                     <button class="btn btn-danger" onclick="stopTest()">Stop Test</button>
                 </div>
 
-                <div id="test-feedback" style="display: none; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 1rem;">
-                    <h4 style="margin-top:0;">Is the fan running?</h4>
-                    <div style="display: flex; gap: 1rem; justify-content: center;">
-                        <button class="btn" style="background: var(--success);" onclick="document.getElementById('test-feedback').style.display='none'; alert('Great! Profile works.');">Yes, it works!</button>
-                        <button class="btn btn-danger" onclick="document.getElementById('test-feedback').style.display='none'; alert('Try reversing polarity or selecting another model.');">No, nothing.</button>
+                <div id="test-feedback" style="display: none; background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 1rem;">
+                    <h4 style="margin-top:0; color:var(--primary);" id="test-status-text">Testing Profile...</h4>
+                    <p style="font-weight:600; font-size: 1.2rem;">Is the fan running?</p>
+                    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                        <button class="btn" style="background: var(--success);" onclick="feedbackYes()">Yes, it works!</button>
+                        <button class="btn btn-danger" onclick="feedbackNo()">No, try next</button>
                     </div>
                 </div>
             </div>
@@ -761,16 +794,67 @@
         }
 
         // Tester Logic
+        const allProfiles = [
+            { name: "SPAL Plus / Early Pierburg (100Hz, Pos)", val: "100,50" },
+            { name: "SPAL Base / Corvette C7 (100Hz, Neg)", val: "100,150" },
+            { name: "Mercedes / Jeep (10Hz, Pos)", val: "10,50" },
+            { name: "Proform Universal (128Hz, Pos)", val: "128,50" },
+            { name: "Bosch 013... (50Hz, Pos)", val: "50,50" }
+        ];
+        let autoTestIndex = -1;
+
         function startTest() {
+            autoTestIndex = -1; // Manual mode
             const fIdx = document.getElementById('test-fan-pin').value;
-            const profile = document.getElementById('test-profile').value.split(','); // "freq,duty"
+            const profileSel = document.getElementById('test-profile');
+            const profile = profileSel.value.split(','); // "freq,duty"
             
-            // T:fan,freq,duty
+            document.getElementById('test-status-text').innerText = "Testing: " + profileSel.options[profileSel.selectedIndex].text;
             sendCmd(`T:${fIdx},${profile[0]},${profile[1]}`);
             document.getElementById('test-feedback').style.display = 'block';
         }
 
+        function startAutoTest() {
+            autoTestIndex = 0;
+            runAutoTestStep();
+        }
+
+        function runAutoTestStep() {
+            if(autoTestIndex >= allProfiles.length) {
+                alert("Auto sequence finished. No profiles worked.");
+                stopTest();
+                return;
+            }
+            const fIdx = document.getElementById('test-fan-pin').value;
+            const p = allProfiles[autoTestIndex];
+            const vals = p.val.split(',');
+            
+            document.getElementById('test-status-text').innerText = `Auto Sequence (${autoTestIndex+1}/${allProfiles.length}):\n${p.name}`;
+            sendCmd(`T:${fIdx},${vals[0]},${vals[1]}`);
+            document.getElementById('test-feedback').style.display = 'block';
+        }
+
+        function feedbackYes() {
+            if(autoTestIndex !== -1) {
+                alert(`Great! Your fan is: ${allProfiles[autoTestIndex].name}`);
+            } else {
+                alert('Great! The manually selected profile works.');
+            }
+            stopTest();
+        }
+
+        function feedbackNo() {
+            if(autoTestIndex !== -1) {
+                autoTestIndex++;
+                runAutoTestStep();
+            } else {
+                alert('Try reversing polarity or selecting another model manually.');
+                stopTest();
+            }
+        }
+
         function stopTest() {
+            autoTestIndex = -1;
             sendCmd(`X:`); // Exit test mode
             document.getElementById('test-feedback').style.display = 'none';
         }
